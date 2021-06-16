@@ -1,0 +1,84 @@
+---
+  - name: create SQL file to drop All schema objects
+    copy:
+      dest: "/{{ target_cluster }}/{{ target_db }}/expdp/DAILY{{ YM.stdout }}/drop_schema_obj_stmt.sql"
+      content: |
+        set feedback off head off line 132 trimspool on
+        connect / as sysdba
+        spool /{{ target_cluster }}/{{ target_db }}/expdp/DAILY{{ YM.stdout }}/drop_schema_obj.sql
+        select 
+          case
+            when OBJECT_TYPE = 'TABLE' then
+              'DROP '|| OBJECT_TYPE||' '||OWNER||'.'||OBJECT_NAME||' CASCADE CONSTRAINTS PURGE;'
+            when OBJECT_TYPE = 'JAVA CLASS' or OBJECT_TYPE = 'JAVA RESOURCE' or OBJECT_TYPE = 'JAVA SOURCE' then
+              'DROP '|| OBJECT_TYPE||' '||OWNER||'.'||'"'||OBJECT_NAME||'";'
+            when OBJECT_TYPE = 'TYPE' then
+              'DROP '|| OBJECT_TYPE||' '||OWNER||'.'||OBJECT_NAME||' FORCE;'
+            when OBJECT_TYPE = 'JOB' then
+              'EXECUTE DBMS_SCHEDULER.DROP_JOB('||''''||OWNER||'.'||OBJECT_NAME||''''||');'
+            when OBJECT_TYPE = 'JOB CLASS' then
+              'EXECUTE DBMS_SCHEDULER.DROP_JOB_CLASS('||''''||OBJECT_NAME||''''||');'
+            else
+              'DROP '|| OBJECT_TYPE||' '||OWNER||'.'||'"'||OBJECT_NAME||'";'
+          end "DDL"
+        FROM  DBA_OBJECTS
+        WHERE
+          OWNER         in {{ schemas }} and
+          object_type   not in (
+                             'DATABASE LINK'
+                           , 'PACKAGE BODY'
+                           , 'LOB'
+                           , 'LOB PARTITION'
+                           , 'INDEX'
+                           , 'INDEX PARTITION'
+                           , 'TABLE PARTITION'
+                           , 'TRIGGER'
+                           )
+        order by
+          owner
+        , object_type;
+#
+  - name: append exit statement to the file drop_schema_obj_stmt.sql
+    lineinfile: 
+      path: "/{{ target_cluster }}/{{ target_db }}/expdp/DAILY{{ YM.stdout }}/drop_schema_obj_stmt.sql"
+      line: exit
+#
+  - name: inline edit of drop_schema_obj_stmt.sql
+    action:
+      shell sed -i 's/, u/, /g;s/\[u/\(/g;s/\]/\)/g' "/{{ target_cluster }}/{{ target_db }}/expdp/DAILY{{ YM.stdout }}/drop_schema_obj_stmt.sql"
+#
+  - name: Output connection details
+    debug:
+      msg: "ORACLE_SID: {{ target_db }}, ORACLE_HOME: {{ oracle_home }}"
+#
+  - name: run drop_schema_obj_stmt.sql
+    remote_user: oracle
+    action: >
+      shell export ORACLE_SID={{ target_db }};
+      export ORACLE_HOME={{ oracle_home }};
+      export TNS_ADMIN={{ tns_admin }};
+      {{ path }}/sqlplus -S /nolog @/{{ target_cluster }}/{{ target_db }}/expdp/DAILY{{ YM.stdout }}/drop_schema_obj_stmt.sql
+#
+  - name: prepend drop_schema_obj.sql
+    lineinfile:
+      path: "/{{ target_cluster }}/{{ target_db }}/expdp/DAILY{{ YM.stdout }}/drop_schema_obj.sql"
+      line: '{{ item }}'
+      insertbefore: BOF
+    with_items:
+      - "spool /{{ target_cluster }}/{{ target_db }}/expdp/DAILY{{ YM.stdout }}/drop_schema_obj.log"
+      - "connect / as sysdba"
+      - "set feedback off head off line 132"
+# 
+  - name: append exit statement to the file drop_schema_obj.sql
+    lineinfile: 
+      path: "/{{ target_cluster }}/{{ target_db }}/expdp/DAILY{{ YM.stdout }}/drop_schema_obj.sql"
+      line: exit
+#
+  - name: run drop_schema_obj.sql
+    remote_user: oracle
+    action: >
+      shell export ORACLE_SID={{ target_db }};
+      export ORACLE_HOME={{ oracle_home }};
+      export TNS_ADMIN={{ tns_admin }};
+      {{ path }}/sqlplus -S /nolog @/{{ target_cluster }}/{{ target_db }}/expdp/DAILY{{ YM.stdout }}/drop_schema_obj.sql
+# End of the playbook

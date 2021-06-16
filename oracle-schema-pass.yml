@@ -1,0 +1,109 @@
+---
+- name: testing file creation
+  hosts: esboradevpt
+  become: no
+  gather_facts: yes
+
+  become_user: oracle
+  vars:
+    oracle_owner: oracle
+    oracle_group: oinstall
+    db_version: 12.2.0.1
+    oracle_base: /u01/app/oracle
+    oracle_mount: "{{ oracle_base }}/product"
+    oracle_home: "{{ oracle_base }}/product/{{ db_version }}/dbhome"
+    path: "{{ oracle_home }}/bin"
+    tns_admin: "{{ oracle_home }}/network/admin"
+    #impdp_type: SCHEMAS=ESB30PT,ESB30PTDEV,ESB30PTQA
+    #impdp_type: 
+    schemas:
+      - ESB30PT
+      - ESB30PTDEV
+      - ESB30PTQA
+    impdp_option: table_exists_action=replace
+    user_id: "'/ as sysdba'"
+    source_db: ESBDPT
+    target_db: ESBDPT
+    source_cluster: u02
+    target_cluster: u02
+    send_mail_to: amahaj3@emory.edu
+
+    parallel: 1
+    today: "{{ ansible_date_time.year }}{{ ansible_date_time.month }}{{ ansible_date_time.day }}"
+    now: "{{ ansible_date_time.hour }}{{ ansible_date_time.minute }}{{ ansible_date_time.second }}"
+
+  tasks:
+
+    # How do we handle 1st of the month (and the latest export is completed on last day of the previous month
+    - name: get YYYYMON
+      action: shell date '+%b%Y'| tr "[a-z]" "[A-Z]"
+      register: YM
+
+    - name: create save encrypted password file for oracle users being imported
+      copy:
+        dest: "/{{ target_cluster }}/{{ target_db }}/expdp/DAILY{{ YM.stdout }}/save_passwd.sql"
+        content: |
+          set feedback off head off line 132 
+          connect / as sysdba
+          spool /{{ target_cluster }}/{{ target_db }}/expdp/DAILY{{ YM.stdout }}/reset_passwd_stmt.sql
+
+    - name: append sql statements to the file save_passwd.sql
+      lineinfile: 
+        path: "/{{ target_cluster }}/{{ target_db }}/expdp/DAILY{{ YM.stdout }}/save_passwd.sql"
+        line: "select 'alter user '||name||' identified by values '||''''||spare4||';'||password||''''||';' from sys.user$ where name in '{{ item }}';"
+      with_items: 
+        - "{{ schemas }}"
+    - name: append exit statement to the file save_passwd.sql
+      lineinfile: 
+        path: "/{{ target_cluster }}/{{ target_db }}/expdp/DAILY{{ YM.stdout }}/save_passwd.sql"
+        line: exit
+
+    - name: create drop user file for oracle users before being imported
+      copy:
+        dest: "/{{ target_cluster }}/{{ target_db }}/expdp/DAILY{{ YM.stdout }}/drop_user_stmt.sql"
+        content: |
+          set feedback off head off line 132
+          spool /{{ target_cluster }}/{{ target_db }}/expdp/DAILY{{ YM.stdout }}/drop_user.sql
+          connect / as sysdba
+
+    - name: append sql statements to the file drop_user_stmt.sql
+      lineinfile: 
+        path: "/{{ target_cluster }}/{{ target_db }}/expdp/DAILY{{ YM.stdout }}/drop_user_stmt.sql"
+        line: "drop user {{ item }} cascade;"
+      with_items: 
+        - "{{ schemas }}"
+    - name: append exit statement to the file drop_user_stmt.sql
+      lineinfile: 
+        path: "/{{ target_cluster }}/{{ target_db }}/expdp/DAILY{{ YM.stdout }}/drop_user_stmt.sql"
+        line: exit
+
+    - name: run reset password sql
+      action: >
+        shell export ORACLE_SID={{ target_db }};
+        export ORACLE_HOME={{ oracle_home }};
+        export TNS_ADMIN={{ tns_admin }};
+        {{ path }}/sqlplus -S /nolog @/{{ target_cluster }}/{{ target_db }}/expdp/DAILY{{ YM.stdout }}/save_passwd.sql
+
+    - name: prepend reset_passwd_stmt.sql
+      lineinfile:
+        path: "/{{ target_cluster }}/{{ target_db }}/expdp/DAILY{{ YM.stdout }}/reset_passwd_stmt.sql"
+        line: '{{ item }}'
+        insertbefore: BOF
+      with_items:
+        - "set feedback off head off line 132"
+        - "spool /{{ target_cluster }}/{{ target_db }}/expdp/DAILY{{ YM.stdout }}/reset_passed.sql"
+        - "connect / as sysdba"
+ 
+    - name: append exit statement to the file reset_passwd_stmt.sql
+      lineinfile: 
+        path: "/{{ target_cluster }}/{{ target_db }}/expdp/DAILY{{ YM.stdout }}/reset_passwd_stmt.sql"
+        line: exit
+
+     
+    #- name: print save_passwd.sql full path
+      #debug:
+        #msg: "{{ path }}/sqlplus -S /nolog @/{{ target_cluster }}/{{ target_db }}/expdp/DAILY{{ YM.stdout }}/save_passwd.sql"      
+
+
+
+
