@@ -1,0 +1,88 @@
+---
+- name: Create disk partitions and file systems
+  hosts: training
+  become: yes
+
+  vars:
+    min_oracle_base_gb: 2
+    min_oracle_home_gb: 2
+    oracle_owner: oracle
+    oracle_group: oinstall
+    oracle_base: /opt/oracle
+    OPatch_zip: /software/Database/Oracle/p6880880_122010_Linux-x86-64.zip
+    APR2021_DBRU_patchid: 32578972
+    APR2021_DBRU_dir: /software/Database/Oracle/19c/Apr2021DBRU
+    APR2021_DBRU_patch: p32578972_190000_Linux-x86-64.zip
+    oracle_home: /opt/oracle/product/19c/dbhome_1
+    oracle_client_home: /opt/oracle/product/19c/client_1
+  become_user: oracle
+
+  gather_facts: no
+
+  tasks:
+    - name: Check free space {{ oracle_base }}
+      action: shell df -h {{ oracle_base }} | awk 'END { print $4 }'|sed 's/[G,M,K]//'
+      register: oracle_base_size
+      failed_when: oracle_base_size.stdout < min_oracle_base_gb
+
+    - name: Check free space {{ oracle_home }}
+      action: shell df -h {{ oracle_home }} | awk 'END { print $4 }'|sed 's/[G,M,K]//'
+      register: oracle_home_size
+      failed_when: oracle_home_size.stdout < min_oracle_home_gb
+
+    - name: Update OPatch dbhome
+      unarchive:
+        src: "{{ OPatch_zip }}"
+        dest: "{{ oracle_home }}"
+        remote_src : yes
+        owner: "{{ oracle_owner }}"
+        group: "{{ oracle_group }}"
+
+    - name: Update OPatch client 19c
+      unarchive:
+        src: "{{ OPatch_zip }}"
+        dest: "{{ oracle_client_home }}"
+        remote_src : yes
+        owner: "{{ oracle_owner }}"
+        group: "{{ oracle_group }}"
+
+    #- name: Unzip patch
+      #unarchive:
+        #src: "{{ APR2021_DBRU_dir }}/{{ APR2021_DBRU_patch }}"
+        #dest: "{{ APR2021_DBRU_dir }}"
+        #remote_src : yes
+        #owner: "{{ oracle_owner }}"
+        #group: "{{ oracle_group }}"
+
+    - name: Check patch conflict detection dbhome
+      action: shell export ORACLE_HOME={{ oracle_home }}; cd "{{ APR2021_DBRU_dir }}/{{ APR2021_DBRU_patchid }}/{{ item }}"; $ORACLE_HOME/OPatch/opatch prereq CheckConflictAgainstOHWithDetail -ph ./
+      with_items: 
+        - 32399816
+        - 32545013
+      register: conflict_detection
+      failed_when: "'Prereq \"checkConflictAgainstOHWithDetail\" passed.' not in conflict_detection.stdout" 
+
+    #- name: Check patch conflict detection client 19c home
+      #action: shell export ORACLE_HOME={{ oracle_client_home }}; cd "{{ APR2021_DBRU_dir }}/{{ APR2021_DBRU_patchid }}/{{ item }}"; $ORACLE_HOME/OPatch/opatch prereq CheckConflictAgainstOHWithDetail -ph ./
+      #with_items: 
+        #- 32399816
+        #- 32545013
+      #register: conflict_detection
+      #failed_when: "'Prereq \"checkConflictAgainstOHWithDetail\" passed.' not in conflict_detection.stdout" 
+
+    #- name: Apply Patch(es) client 19c home
+      #action: shell export ORACLE_HOME={{ oracle_client_home }}; cd "{{ APR2021_DBRU_dir }}/{{ APR2021_DBRU_patchid }}/{{ item }}"; $ORACLE_HOME/OPatch/opatch apply -silent
+      #with_items: 
+        #- 32399816
+        #- 32545013
+      #register: patch_apply
+      #failed_when: "'OPatch succeeded.' not in patch_apply.stdout"
+
+    - name: Apply Patch(es) dbhome
+      action: shell export ORACLE_HOME={{ oracle_home }}; cd "{{ APR2021_DBRU_dir }}/{{ APR2021_DBRU_patchid }}/{{ item }}"; $ORACLE_HOME/OPatch/opatch apply -silent
+      with_items: 
+        - 32399816
+        - 32545013
+      register: patch_apply
+      failed_when: "'OPatch succeeded.' not in patch_apply.stdout"
+

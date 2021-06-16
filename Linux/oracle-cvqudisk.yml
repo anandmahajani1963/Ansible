@@ -1,0 +1,5 @@
+---
+- name: Install the cvuqdisk rpm package
+  yum: 
+    name: cvuqdisk-1.0.10-1.rpm
+    state: present

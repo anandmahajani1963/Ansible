@@ -1,0 +1,53 @@
+---
+- name: Recompile schemas
+  hosts: oracle12gg1
+  become: no
+  gather_facts: yes
+  remote_user: oracle
+  become_user: oracle
+  vars:
+    oracle_owner: oracle
+    oracle_group: oinstall
+    oracle_base: /opt/oracle
+    oracle_mount: "{{ oracle_base }}/product"
+    oracle_home: "{{ oracle_base }}/product/12c/dbhome_1"
+    path: "{{ oracle_home }}/bin"
+    tns_admin: "{{ oracle_home }}/network/admin"
+    schemas:
+      - BI
+      - OE
+      - SH
+    target_db: DEVGG1
+    target_cluster: oracle12gg1
+  tasks:
+    - name: get YYYYMON
+      action: shell date '+%b%Y'| tr "[a-z]" "[A-Z]"
+      register: YM
+
+    - name: Create SQL Script to recompile schema(s).
+      copy:
+        dest: "/{{ target_cluster }}/{{ target_db }}/expdp/DAILY{{ YM.stdout }}/recompile_schema.sql"
+        content: |
+          set feedback on
+          spool /{{ target_cluster }}/{{ target_db }}/expdp/DAILY{{ YM.stdout }}/recompile_schema.log
+          connect / as sysdba
+    - name: Append recompile statements to recompile_schema.sql script
+      lineinfile: 
+        path: "/{{ target_cluster }}/{{ target_db }}/expdp/DAILY{{ YM.stdout }}/recompile_schema.sql"
+        line: 
+          "EXECUTE DBMS_UTILITY.COMPILE_SCHEMA(SCHEMA=>'{{ item }}');"
+      with_items:
+        - "{{ schemas }}"
+    - name: Append exit statement to recompile_schema.sql script
+      lineinfile: 
+        path: "/{{ target_cluster }}/{{ target_db }}/expdp/DAILY{{ YM.stdout }}/recompile_schema.sql"
+        line: 
+          exit;
+#
+    - name: Recompile All schemas
+      remote_user: oracle
+      action: >
+        shell export ORACLE_SID={{ target_db }};
+        export ORACLE_HOME={{ oracle_home }};
+        export TNS_ADMIN={{ tns_admin }};
+        {{ path }}/sqlplus -S /nolog @/{{ target_cluster }}/{{ target_db }}/expdp/DAILY{{YM.stdout }}/recompile_schema.sql

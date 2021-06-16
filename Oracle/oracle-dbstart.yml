@@ -1,0 +1,56 @@
+---
+- name: Create disk partitions and file systems
+  hosts: oracle12gg1,oracle12cdb
+  become: yes
+  become_user: oracle
+  gather_facts: no
+
+  vars:
+    oracle_owner: oracle
+    oracle_group: oinstall
+    oracle_base: /opt/oracle
+    oracle_home: /opt/oracle/product/12c/dbhome_1
+
+  tasks:
+    - name: Check if oracle database(s) is/are up and running
+      action: shell ps -ef|grep pmon|grep -v grep|cut -f3 -d"_"
+      register: ora_pmon
+    - name: list database instance(s) running
+      debug:
+        msg: "Database(s) {{ ora_pmon.stdout_lines }} is/are running "
+
+    - name: list Oracle Listner(s) running
+      action: shell ps -ef|grep -v grep|grep lsnr |awk '{print $9}'
+      register: ora_listener
+    - name: Listener Status
+      debug: 
+        msg: "Oracle listner {{ ora_listener }} is running"
+
+    - name: start Oracle database instances listed in /etc/oratab and Oracle Listener
+      action: shell export ORACLE_HOME={{ oracle_home }}; $ORACLE_HOME/bin/dbstart $ORACLE_HOME
+      register: ora_start
+      when: 
+        - ora_pmon.stdout == ""
+        - ora_listener.stdout == ""
+
+##  - name: DB start successful
+##    debug:
+##      msg: "Database(s) and Listner started successfully"
+##    when: ora_start.rc == 0
+##  - name: DB start failed
+##    debug: 
+##      msg: "Database(s) and Listner did not start successfully"
+##    when: ora_start.rc != 0
+##    tasks: 
+##      - name: "Check if oracle database(s) is/are up and running post startup checks"
+##        action: shell ps -ef|grep pmon|grep -v grep|cut -f3 -d"_"
+##        register: ora_pmon2
+##        debug:
+##          msg: "Database(s) {{ ora_pmon2.stdout_lines }} is/are running "
+##      - name: start Oracle database instances listed in /etc/oratab and Oracle Listener
+##        action: shell export ORACLE_HOME={{ oracle_home }}; $ORACLE_HOME/bin/dbstart $ORACLE_HOME
+##        register: ora_start
+##        when: 
+##          - ora_pmon.stdout != ""
+##          - ora_listener != ""
+

@@ -1,0 +1,38 @@
+---
+- name: Create disk partitions and file systems
+  hosts: training
+  become: yes
+
+  vars:
+    oracle_owner: oracle
+    oracle_group: oinstall
+    oracle_base: /opt/oracle
+    oracle_mount: /opt/oracle/product
+    oracle_client_21c: /opt/oracle/product/21c/client_1
+    oracle_home_21c_zip: /software/Database/Oracle/21c/LINUX.X64_210000_client_home.zip
+    oracle_home_21c_rsp: /software/Database/Oracle/21c
+
+  tasks:
+
+    - name: create oracle client 21c home directory and change ownership
+      file:
+        state: directory
+        path: "{{ oracle_client_21c }}"
+        owner: "{{ oracle_owner }}"
+        group: "{{ oracle_group }}"
+        recurse: yes
+
+    - name: unzip oracle 21c client software
+      unarchive:
+        src: "{{ oracle_home_21c_zip }}"
+        dest: "{{ oracle_client_21c }}"
+        remote_src : yes
+        owner: "{{ oracle_owner }}"
+        group: "{{ oracle_group }}"
+
+    - name: Run Installer for 21c client
+      become_user: oracle
+      shell: "{{ oracle_client_21c }}/runInstaller -silent -responseFile {{ oracle_home_21c_rsp }}/client21c.rsp"
+
+    - name: Run root.sh for 21c client
+      action: shell "{{ oracle_client_21c }}/root.sh"

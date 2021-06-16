@@ -1,0 +1,29 @@
+---
+- name: Create disk partitions and file systems
+  hosts: linuxacademy2
+  become: yes
+
+  vars:
+    disk1: /dev/sdf
+    disk2: /dev/sdg
+
+  tasks:
+    - name: create disk partition
+      parted: 
+        device: "{{ item }}"
+        number: 1
+        part_type: "primary"
+        part_start: "0%"
+        part_end: "100%"
+        state: present
+      with_items:
+        - "{{ disk1 }}"
+        - "{{ disk2 }}"
+    - name: make xfs file system 
+      filesystem: 
+        fstype: xfs
+        dev: "{{ item }}"
+        force: yes
+      with_items:
+        - "{{ disk1 }}1"
+        - "{{ disk2 }}1"

@@ -1,0 +1,41 @@
+---
+- name: Create disk partitions and file systems
+  hosts: linuxacademy1
+  become: yes
+
+  vars:
+    disk1: /dev/sdf
+    disk2: /dev/sdg
+
+  tasks:
+    - name: Create Volume Group(s) 
+      lvg:
+        vg: app_vg
+        pvs: "{{ disk1 }},{{ disk2 }}"
+    - name: Create Logical Volume oracle_bin
+      lvol:
+        vg: 'app_vg'
+        lv: oracle_bin
+        size: 12G
+           
+    - name: Create Logical Volume oracle_diag
+      lvol:
+        vg: 'app_vg'
+        lv: oracle_diag
+        size: 4G
+           
+    - name: Create Logical Volume oracle_data
+      lvol:
+        vg: 'app_vg'
+        lv: oracle_data
+        size: 4G
+           
+    - name: make xfs file system 
+      filesystem: 
+        fstype: xfs
+        dev: "{{ item }}"
+        force: yes
+      with_items:
+        - "/dev/mapper/app_vg-oracle_bin"
+        - "/dev/mapper/app_vg-oracle_diag"
+        - "/dev/mapper/app_vg-oracle_data"

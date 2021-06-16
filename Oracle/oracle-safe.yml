@@ -1,0 +1,94 @@
+---
+- name: Create disk partitions and file systems
+  hosts: training
+  become: yes
+
+  vars:
+    oracle_owner: oracle
+    oracle_group: oinstall
+    oracle_base: /opt/oracle
+    oracle_mount: /opt/oracle/product
+    oracle_home: /opt/oracle/product/19c/dbhome_1
+    oracle_client: /opt/oracle/product/19c/client_1
+    oracle_client_21: /opt/oracle/product/21c/client_1
+    oracle_db_rpm: /software/Database/Oracle/19c/oracle-database-ee-19c-1.0-1.x86_64.rpm
+
+  tasks:
+    - name: Import oracle linux repo
+      get_url: 
+        url: http://yum.oracle.com/public-yum-ol7.repo
+        dest: /etc/yum.repos.d/public-yum-ol7.repo
+    - name: import GPG keys
+      get_url:
+        url: https://yum.oracle.com/RPM-GPG-KEY-oracle-ol7
+        dest: /etc/pki/rpm-gpg/RPM-GPG-KEY-oracle
+    #- name: fingerprint gpg key
+      #command:
+        #name: gpg
+        #fingerprint: /etc/pki/rpm-gpg/RPM-GPG-KEY-oracle
+
+    - name: Install pre-req
+      yum:
+        name: oraclelinux-release-el7
+        state: latest
+
+    - name: run config
+      command: /usr/bin/ol_yum_configure.sh
+
+    - name: Run Oracle Preinstall RPM
+      yum: 
+        name: oracle-database-preinstall-19c
+        state: present
+  
+    - name: create oracle base directory and change ownership
+      file:
+        state: directory
+        path: "{{ oracle_base }}"
+        owner: "{{ oracle_owner }}"
+        group: "{{ oracle_group }}"
+        recurse: yes
+  
+    - name: create mount point directory
+      #ansible.posix.mount:
+      mount:
+        fstab: /etc/fstab
+        src: /dev/sdg1
+        path: "{{ oracle_mount }}"
+        state: mounted
+        fstype: xfs
+
+    - name: change ownership of mount point
+      file: 
+        path: "{{ oracle_mount }}"
+        owner: "{{ oracle_owner }}"
+        group: "{{ oracle_group }}"
+        recurse: yes
+    
+    - name: create oracle db home directory and change ownership
+      file:
+        state: directory
+        path: "{{ oracle_home }}"
+        owner: "{{ oracle_owner }}"
+        group: "{{ oracle_group }}"
+        recurse: yes
+    
+    - name: create oracle client 19c home directory and change ownership
+      file:
+        state: directory
+        path: "{{ oracle_client }}"
+        owner: "{{ oracle_owner }}"
+        group: "{{ oracle_group }}"
+        recurse: yes
+
+    - name: create oracle client 21c home directory and change ownership
+      file:
+        state: directory
+        path: "{{ oracle_client_21 }}"
+        owner: "{{ oracle_owner }}"
+        group: "{{ oracle_group }}"
+        recurse: yes
+
+    - name: Install Oracle DB 19c software
+      yum:
+        name: "{{ oracle_db_rpm }}"
+        state: present

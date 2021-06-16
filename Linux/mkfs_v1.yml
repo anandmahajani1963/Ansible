@@ -1,0 +1,28 @@
+---
+- name: Create disk partitions and file systems
+  hosts: linuxacademy2
+  become: yes
+
+  vars:
+    disk1: /dev/sdf
+    disk2: /dev/sdg
+
+  tasks:
+    - name: create disk partition
+      shell: echo -e "n\np\n1\n\n\np\nw"|fdisk {{ item }}
+      with_items:
+        - "{{ disk1 }}"
+        - "{{ disk2 }}"
+    - name: Print disk partition
+      shell: echo -e "\np\nq"|fdisk {{ item }}
+      with_items: 
+        - "{{ disk1 }}"
+        - "{{ disk2 }}"
+      register: disk_part
+    - debug:
+        msg: "Disk partition details {{ disk_part }}"
+    - name: make xfs file system 
+      shell: mkfs.xfs -f {{ item }}
+      with_items:
+        - "{{ disk1 }}1"
+        - "{{ disk2 }}1"

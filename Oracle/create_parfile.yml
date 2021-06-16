@@ -1,0 +1,5 @@
+---
+- template:
+    src: expdp.j2
+    dest: expdp_{{ DB_NAME }}.par
+

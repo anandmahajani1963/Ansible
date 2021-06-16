@@ -1,0 +1,64 @@
+---
+- name: Create disk partitions and file systems
+  hosts: training
+  become: yes
+
+  vars:
+    oracle_owner: oracle
+    oracle_group: oinstall
+    oracle_base: /u01/app/oracle
+    oracle_mount: /u01/app/oracle/product
+
+  tasks:
+    - name: Import oracle linux repo
+      get_url: 
+        url: http://yum.oracle.com/public-yum-ol7.repo
+        dest: /etc/yum.repos.d/public-yum-ol7.repo
+
+    - name: import GPG keys
+      get_url:
+        url: https://yum.oracle.com/RPM-GPG-KEY-oracle-ol7
+        dest: /etc/pki/rpm-gpg/RPM-GPG-KEY-oracle
+
+    - name: fingerprint gpg key
+      action: shell gpg --quiet --with-fingerprint /etc/pki/rpm-gpg/RPM-GPG-KEY-oracle
+
+    # Below task is not required for RHEL8.
+    - name: Install pre-req oraclelinux-release-el7
+      yum:
+        name: oraclelinux-release-el7
+        state: latest
+
+    # Below task is not required for RHEL8.
+    - name: run config
+      command: /usr/bin/ol_yum_configure.sh
+
+    - name: Run Oracle Preinstall RPM
+      yum: 
+        name: oracle-database-preinstall-19c
+        state: present
+  
+    - name: install missing compat-libstdc++-33 module
+      yum:
+        name: 
+          - compat-libstdc++-33
+          - compat-openssl10
+          - libnsl
+          - libibverbs
+          - policycoreutils-python-utils
+        state: latest
+
+    - name: create oracle base directory and change ownership
+      file:
+        state: directory
+        path: "{{ oracle_base }}"
+        owner: "{{ oracle_owner }}"
+        group: "{{ oracle_group }}"
+        recurse: yes
+  
+    - name: change ownership of mount point
+      file: 
+        path: "{{ oracle_mount }}"
+        owner: "{{ oracle_owner }}"
+        group: "{{ oracle_group }}"
+        recurse: yes

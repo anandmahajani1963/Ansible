@@ -1,0 +1,26 @@
+---
+- name: Create disk partitions and file systems
+  hosts: training
+  become: yes
+
+  vars:
+    oracle_owner: oracle
+    oracle_group: oinstall
+    oracle_base: /opt/oracle
+    oracle_mount: /opt/oracle/product
+    oracle_home: /opt/oracle/product/19c/dbhome_1
+    oracle_db_rpm: /software/Database/Oracle/19c/oracle-database-ee-19c-1.0-1.x86_64.rpm
+
+  tasks:
+    - name: create oracle db home directory and change ownership
+      file:
+        state: directory
+        path: "{{ oracle_home }}"
+        owner: "{{ oracle_owner }}"
+        group: "{{ oracle_group }}"
+        recurse: yes
+    
+    - name: Install Oracle DB 19c software
+      yum:
+        name: "{{ oracle_db_rpm }}"
+        state: present
